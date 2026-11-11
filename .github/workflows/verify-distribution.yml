@@ -29,6 +29,7 @@ jobs:
           assert 'e6a6489ee864c445ecb963495007d84d16094eb49fa0ab7ac959f91474f48949' in sig
           badging=subprocess.run([str(tools[-1].parent/'aapt2'),'dump','badging',str(p)],capture_output=True,text=True,check=True).stdout
           assert "name='ar.agara.agarapp.dueltest'" in badging and "versionCode='4'" in badging and "versionName='1.0.4-test'" in badging
+          report['apkDownloadedAt']=datetime.datetime.now(datetime.timezone.utc).isoformat()
           report['APK']={'bytes':size,'sha256':digest.hexdigest(),'signatureVerified':True,'package':'ar.agara.agarapp.dueltest','versionCode':4,'versionName':'1.0.4-test'}
           page='https://gonman17.github.io/agarapp-test-downloads/'
           for i in range(24):
@@ -44,11 +45,17 @@ jobs:
           with urllib.request.urlopen(urllib.request.Request(config+'?external='+str(time.time()),headers={'accept':'application/vnd.github+json'}),timeout=30) as r:d=json.load(r)
           assert d['id']=='f1b12d22f5714ae6efb4e1227486686c' and d['owner']['id']==214735205
           content=d['files']['agarapp-test.json']['content'];assert hashlib.sha256(content.encode()).hexdigest()==d['files']['agarapp-test.sha256']['content'];c=json.loads(content);assert c['environment']=='TEST' and c['backendId']=='localduel1v1test0000';assert re.fullmatch(r'https://[a-z0-9]+(?:-[a-z0-9]+){1,8}\.trycloudflare\.com',c['origin']);assert datetime.datetime.fromisoformat(c['expiresAt'])>datetime.datetime.now(datetime.timezone.utc)
-          for i in range(12):
+          report['initialBackendGeneration']=c['generation']
+          report['healthFailuresBeforeRecovery']=0
+          for i in range(18):
            try:
+            with urllib.request.urlopen(urllib.request.Request(config+'?retry='+str(time.time()),headers={'accept':'application/vnd.github+json'}),timeout=20) as current_response: current_document=json.load(current_response)
+            assert current_document['owner']['id']==214735205
+            current_content=current_document['files']['agarapp-test.json']['content'];assert hashlib.sha256(current_content.encode()).hexdigest()==current_document['files']['agarapp-test.sha256']['content'];c=json.loads(current_content);assert c['environment']=='TEST' and c['backendId']=='localduel1v1test0000' and re.fullmatch(r'https://[a-z0-9]+(?:-[a-z0-9]+){1,8}\.trycloudflare\.com',c['origin'])
             with urllib.request.urlopen(c['origin']+'/health',timeout=20) as r:h=json.load(r);assert r.status==200 and h['test'] and h['restricted'] and h['backendReady'];break
            except Exception:
-            if i==11:raise
+            report['healthFailuresBeforeRecovery']+=1
+            if i==17:raise
             time.sleep(10)
           try:
            urllib.request.urlopen(urllib.request.Request(c['origin']+'/auth/v1/test-access',data=b'{}',headers={'content-type':'application/json'}),timeout=20)
